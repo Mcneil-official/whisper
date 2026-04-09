@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Whisper Upload Transcriber</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="scene"></div>
+  <main class="layout">
+    <section class="hero">
+      <p class="eyebrow">Audio to Text</p>
+      <h1>Drop an m4a file and get your transcript instantly.</h1>
+      <p class="subtitle">Whisper-powered transcription with plain text, timestamps, and one-click txt/srt exports.</p>
+    </section>
+
+    <section class="card">
+      <form id="upload-form">
+        <input id="audio-file" name="file" type="file" accept=".m4a,.mp3,.wav,.mp4,.ogg,.flac" required>
+        <div class="upload-controls">
+          <label id="choose-file-btn" for="audio-file" class="choose-file-btn">Upload recording</label>
+
+          <div id="file-chip" class="file-chip hidden" aria-live="polite">
+            <span id="file-chip-name" class="file-chip-name"></span>
+            <button id="remove-file-btn" type="button" class="file-chip-remove" aria-label="Remove selected file">X</button>
+          </div>
+
+          <button id="submit-btn" type="submit">Transcribe</button>
+        </div>
+      </form>
+      <p id="status" class="status">Ready for upload.</p>
+
+      <div id="progress-wrap" class="progress-wrap hidden" aria-live="polite">
+        <div class="progress-header">
+          <span id="progress-stage">Queued</span>
+          <span id="progress-percent">0%</span>
+        </div>
+        <div class="progress-track">
+          <div id="progress-bar" class="progress-bar"></div>
+        </div>
+      </div>
+
+      <div id="downloads" class="downloads hidden">
+        <a id="download-txt" href="#" download>Download TXT</a>
+        <a id="download-srt" href="#" download>Download SRT</a>
+      </div>
+    </section>
+
+    <section class="results">
+      <article>
+        <h2>Plain Transcript</h2>
+        <pre id="plain-output" class="output">Your transcript will appear here.</pre>
+      </article>
+      <article>
+        <h2>Timestamped Transcript</h2>
+        <pre id="timestamp-output" class="output">Timestamped lines will appear here.</pre>
+      </article>
+    </section>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>
