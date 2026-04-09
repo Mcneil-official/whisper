@@ -5,7 +5,8 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     app_name: str = "Whisper Web Transcriber"
     max_upload_mb: int = 100
-    whisper_model: str = "base"
+    openai_api_key: str | None = None
+    transcription_model: str = "whisper-1"
     allowed_extensions: tuple[str, ...] = (".m4a", ".mp3", ".wav", ".mp4", ".ogg", ".flac")
 
     model_config = SettingsConfigDict(

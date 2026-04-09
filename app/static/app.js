@@ -16,12 +16,8 @@ const downloads = document.getElementById("downloads");
 const downloadTxt = document.getElementById("download-txt");
 const downloadSrt = document.getElementById("download-srt");
 let activeFile = null;
-
-function delay(ms) {
-  return new Promise((resolve) => {
-    setTimeout(resolve, ms);
-  });
-}
+let estimatedProgressTimer = null;
+let downloadObjectUrls = [];
 
 function titleCase(text) {
   return text
@@ -41,18 +37,86 @@ function setProgress(state, progress) {
   progressBar.style.width = `${safeProgress}%`;
 }
 
+function startEstimatedProgress() {
+  stopEstimatedProgress();
+  let progress = 12;
+  setProgress("transcribing", progress);
+  estimatedProgressTimer = window.setInterval(() => {
+    progress = Math.min(progress + Math.max(2, Math.round(Math.random() * 8)), 92);
+    setProgress("transcribing", progress);
+  }, 420);
+}
+
+function stopEstimatedProgress() {
+  if (estimatedProgressTimer) {
+    window.clearInterval(estimatedProgressTimer);
+    estimatedProgressTimer = null;
+  }
+}
+
+function revokeDownloadUrls() {
+  for (const objectUrl of downloadObjectUrls) {
+    URL.revokeObjectURL(objectUrl);
+  }
+  downloadObjectUrls = [];
+}
+
+function fileBaseName(name) {
+  return name.replace(/\.[^.]+$/, "");
+}
+
+function buildTimestampedText(segments) {
+  return segments
+    .map((segment) => {
+      const start = Number(segment.start || 0).toFixed(2);
+      const end = Number(segment.end || 0).toFixed(2);
+      return `[${start}s -> ${end}s] ${segment.text}`;
+    })
+    .join("\n");
+}
+
+function formatSrtTimestamp(seconds) {
+  const totalMilliseconds = Math.max(0, Math.round(Number(seconds || 0) * 1000));
+  const hours = Math.floor(totalMilliseconds / 3_600_000);
+  const remainingAfterHours = totalMilliseconds % 3_600_000;
+  const minutes = Math.floor(remainingAfterHours / 60_000);
+  const remainingAfterMinutes = remainingAfterHours % 60_000;
+  const secs = Math.floor(remainingAfterMinutes / 1000);
+  const milliseconds = remainingAfterMinutes % 1000;
+  return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:${String(secs).padStart(2, "0")},${String(milliseconds).padStart(3, "0")}`;
+}
+
+function buildSrt(segments) {
+  return segments
+    .map((segment, index) => {
+      const start = formatSrtTimestamp(segment.start);
+      const end = formatSrtTimestamp(segment.end);
+      return `${index + 1}\n${start} --> ${end}\n${segment.text.trim()}\n`;
+    })
+    .join("\n");
+}
+
 function renderTranscript(payload) {
   plainOutput.textContent = payload.text || "No transcript text returned.";
 
-  const timestampLines = (payload.segments || []).map((segment) => {
-    const start = Number(segment.start || 0).toFixed(2);
-    const end = Number(segment.end || 0).toFixed(2);
-    return `[${start}s -> ${end}s] ${segment.text}`;
-  });
-  timestampOutput.textContent = timestampLines.join("\n") || "No segments returned.";
+  const segments = payload.segments || [];
+  timestampOutput.textContent = buildTimestampedText(segments) || "No segments returned.";
 
-  downloadTxt.href = `/api/transcripts/${payload.transcript_id}/download/txt`;
-  downloadSrt.href = `/api/transcripts/${payload.transcript_id}/download/srt`;
+  revokeDownloadUrls();
+  const transcriptText = payload.text || "";
+  const srtText = buildSrt(segments);
+
+  const txtBlob = new Blob([transcriptText], { type: "text/plain;charset=utf-8" });
+  const srtBlob = new Blob([srtText], { type: "application/x-subrip;charset=utf-8" });
+
+  const txtUrl = URL.createObjectURL(txtBlob);
+  const srtUrl = URL.createObjectURL(srtBlob);
+  downloadObjectUrls.push(txtUrl, srtUrl);
+
+  downloadTxt.href = txtUrl;
+  downloadSrt.href = srtUrl;
+  downloadTxt.download = `${fileBaseName(activeFile?.name || "transcript")}.txt`;
+  downloadSrt.download = `${fileBaseName(activeFile?.name || "transcript")}.srt`;
   downloads.classList.remove("hidden");
 }
 
@@ -78,6 +142,7 @@ function clearSelectedFile() {
   status.textContent = "Ready for upload.";
   showProgress(false);
   setProgress("queued", 0);
+  stopEstimatedProgress();
   setLoading(false);
 }
 
@@ -100,10 +165,11 @@ async function transcribeSelectedFile() {
   resetResults();
   showProgress(true);
   setProgress("queued", 0);
-  status.textContent = "Uploading file and creating transcription job...";
+  status.textContent = "Uploading file and transcribing...";
+  startEstimatedProgress();
 
   try {
-    const response = await fetch("/api/transcribe/jobs", {
+    const response = await fetch("/api/transcribe", {
       method: "POST",
       body: formData,
     });
@@ -112,51 +178,18 @@ async function transcribeSelectedFile() {
     if (!response.ok) {
       throw new Error(payload.detail || "Transcription failed.");
     }
-
-    const jobId = payload.job_id;
-    if (!jobId) {
-      throw new Error("Transcription job id was not returned.");
-    }
-
-    status.textContent = "Job started. Waiting for transcription progress...";
-
-    while (true) {
-      const statusResponse = await fetch(`/api/transcribe/jobs/${jobId}/status`);
-      const statusPayload = await statusResponse.json();
-
-      if (!statusResponse.ok) {
-        throw new Error(statusPayload.detail || "Failed to fetch job status.");
-      }
-
-      setProgress(statusPayload.state, statusPayload.progress);
-      status.textContent = statusPayload.message || "Transcribing...";
-
-      if (statusPayload.state === "completed") {
-        break;
-      }
-
-      if (statusPayload.state === "failed") {
-        throw new Error(statusPayload.error || statusPayload.message || "Transcription failed.");
-      }
-
-      await delay(1200);
-    }
-
-    const resultResponse = await fetch(`/api/transcribe/jobs/${jobId}/result`);
-    const resultPayload = await resultResponse.json();
-
-    if (!resultResponse.ok) {
-      throw new Error(resultPayload.detail || "Unable to load transcription result.");
-    }
-
-    renderTranscript(resultPayload);
+    stopEstimatedProgress();
     setProgress("completed", 100);
-    status.textContent = `Done. Detected language: ${resultPayload.language || "unknown"}.`;
+    renderTranscript(payload);
+    setProgress("completed", 100);
+    status.textContent = `Done. Detected language: ${payload.language || "unknown"}.`;
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unexpected error.";
+    stopEstimatedProgress();
     showProgress(false);
     status.textContent = `Error: ${message}`;
   } finally {
+    stopEstimatedProgress();
     setLoading(false);
   }
 }

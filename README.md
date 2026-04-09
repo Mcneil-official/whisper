@@ -1,5 +1,13 @@
 # Whisper Upload Web Transcriber
 
+This repo is now Vercel-friendly.
+
+The deployment path is:
+
+1. Vercel hosts the frontend and Python API.
+2. Transcription runs through the OpenAI API instead of local Whisper.
+3. The browser generates `.txt` and `.srt` downloads locally from the response.
+
 Upload an audio file (`.m4a`, `.mp3`, `.wav`, `.mp4`, `.ogg`, `.flac`) from a browser and get:
 
 - Plain transcript text
@@ -14,7 +22,7 @@ Upload an audio file (`.m4a`, `.mp3`, `.wav`, `.mp4`, `.ogg`, `.flac`) from a br
 pip install -r requirements.txt
 ```
 
-Make sure `ffmpeg` is installed and available in your PATH.
+You do not need `ffmpeg` or local Whisper for Vercel deployment anymore.
 
 ## 2) Configure
 
@@ -26,7 +34,8 @@ Optional `.env` settings:
 
 - `APP_NAME`
 - `MAX_UPLOAD_MB`
-- `WHISPER_MODEL` (e.g. `tiny`, `base`, `small`, `medium`, `large`)
+- `OPENAI_API_KEY`
+- `TRANSCRIPTION_MODEL` (default: `whisper-1`)
 
 ## 3) Run
 
@@ -36,29 +45,21 @@ uvicorn app.main:app --reload
 
 Open your browser at `http://127.0.0.1:8000`.
 
-## API Endpoints
+## Vercel Deployment
+
+1. Set your OpenAI API key in Vercel environment variables.
+2. Deploy the repo as a Python project.
+3. Vercel will pick up the ASGI app from [app/main.py](app/main.py).
+4. The `vercel.json` file excludes local dev files and the old Whisper artifacts from the bundle.
+
+## API Endpoint
 
 - `POST /api/transcribe`
-- `POST /api/transcribe/jobs`
-- `GET /api/transcribe/jobs/{job_id}/status`
-- `GET /api/transcribe/jobs/{job_id}/result`
-- `GET /api/transcripts/{transcript_id}`
-- `GET /api/transcripts/{transcript_id}/timestamped`
-- `GET /api/transcripts/{transcript_id}/download/txt`
-- `GET /api/transcripts/{transcript_id}/download/srt`
 
-## Progress Flow
-
-The web UI now uses a server-side job flow to show transcription progress:
-
-1. Upload creates a job with `POST /api/transcribe/jobs`.
-2. Frontend polls `GET /api/transcribe/jobs/{job_id}/status` every ~1.2s.
-3. When status becomes `completed`, frontend loads the transcript from `GET /api/transcribe/jobs/{job_id}/result`.
-
-Progress is stage-based (`queued`, `preparing`, `transcribing`, `formatting`, `completed`/`failed`) with percentage updates from the server.
+The browser handles timestamp display and `.txt`/`.srt` downloads from the returned transcript payload.
 
 ## Notes
 
-- This first version stores transcript results in memory. Restarting the server clears transcript history.
-- Download files are created under `app/static/downloads/`.
-- For public deployment later, use a persistent database/object storage and restrict CORS origins.
+- The app no longer depends on local Whisper or in-memory transcript storage.
+- Downloads are created in the browser, so there is no server-side file persistence requirement.
+- For public deployment later, keep your API key restricted to Vercel environment variables.
